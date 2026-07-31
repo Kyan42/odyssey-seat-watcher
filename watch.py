@@ -47,6 +47,15 @@ STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.jso
 SEAT_RE = re.compile(r"^([A-Z]+)(\d+)$")
 EPOCH = "2000-01-01T00:00:00+00:00"
 
+# Test hook: FORCE_ZONE="A:1-39" temporarily widens the target zone so a run is
+# guaranteed to trigger, letting you prove the alert path end to end.
+_force = os.environ.get("FORCE_ZONE", "").strip()
+if _force:
+    _rows, _, _span = _force.partition(":")
+    _lo, _, _hi = _span.partition("-")
+    PRIME_ROWS = set(_rows.split(","))
+    SEAT_MIN, SEAT_MAX = int(_lo), int(_hi)
+
 
 def now():
     return datetime.now(timezone.utc)

@@ -5,6 +5,11 @@ on:
     # Every 15 minutes, offset off the hour to dodge GitHub's top-of-hour queue.
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
+    inputs:
+      force_zone:
+        description: 'Widen the target zone to force an alert, e.g. "A:1-39". Leave blank for a normal run.'
+        required: false
+        default: ""
 
 concurrency:
   group: seat-watch
@@ -23,10 +28,11 @@ jobs:
       - name: Check seat maps
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          FORCE_ZONE: ${{ inputs.force_zone }}
         run: python3 watch.py
 
       - name: Persist alert state
-        if: always()
+        if: always() && !inputs.force_zone
         run: |
           if [[ -n "$(git status --porcelain state.json)" ]]; then
             git config user.name  "github-actions[bot]"
