@@ -13,7 +13,9 @@ alerts are de-duplicated between runs.
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -92,27 +94,44 @@ def send_push(title, message, click_url=None, priority="urgent"):
 
 
 def get_seat_map(show):
-    """Fetch the seat map. The Referer header is REQUIRED - without it
-    Fandango answers 403 {"error":"FORBIDDEN"}."""
-    req = urllib.request.Request(
-        f"https://www.fandango.com/napi/seatMap/{show['hash']}",
-        headers={
-            "User-Agent": UA,
-            "Accept": "application/json",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": theater_url(show["date"]),
-            "X-Requested-With": "XMLHttpRequest",
-        },
-    )
+    """Fetch the seat map.
+
+    Two non-obvious requirements:
+      * The Referer header is mandatory - without it Fandango answers
+        403 {"error":"FORBIDDEN"}.
+      * The request must go through curl, not urllib. Akamai fingerprints the
+        TLS handshake and blocks Python's client outright with an HTML
+        "Access Denied" page, while curl is let through.
+    """
+    url = f"https://www.fandango.com/napi/seatMap/{show['hash']}"
+    body = os.path.join(tempfile.gettempdir(), f"smap_{show['date']}.json")
     try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            if resp.status != 200:
-                raise RuntimeError(f"HTTP {resp.status} from seatMap API")
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"HTTP {exc.code} from seatMap API") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"network error: {exc.reason}") from exc
+        proc = subprocess.run(
+            [
+                "curl", "-sS", "--max-time", "45",
+                "-A", UA,
+                "-H", "Accept: application/json",
+                "-H", "Accept-Language: en-US,en;q=0.9",
+                "-H", f"Referer: {theater_url(show['date'])}",
+                "-H", "X-Requested-With: XMLHttpRequest",
+                "-o", body, "-w", "%{http_code}",
+                url,
+            ],
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("curl timed out") from exc
+
+    status = proc.stdout.strip()
+    if status != "200":
+        raise RuntimeError(f"HTTP {status or '???'} from seatMap API "
+                           f"{proc.stderr.strip()}".strip())
+
+    try:
+        with open(body, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"could not parse seatMap response: {exc}") from exc
 
     if not data.get("seats"):
         raise RuntimeError("seatMap response had no seats array")

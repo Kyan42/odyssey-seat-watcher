@@ -18,8 +18,13 @@ needs to be switched on.
 GET https://www.fandango.com/napi/seatMap/{showtimeHashCode}
 ```
 
-No auth or cookies are needed, **but a `Referer` header pointing at the theatre
-page is mandatory** — without it the API returns `403 {"error":"FORBIDDEN"}`.
+No auth or cookies are needed, but two things are easy to get wrong:
+
+1. **A `Referer` header pointing at the theatre page is mandatory.** Without it
+   the API returns `403 {"error":"FORBIDDEN"}`.
+2. **The request has to be made with `curl`, not Python's `urllib`.** Akamai
+   fingerprints the TLS handshake and serves Python an HTML *Access Denied*
+   page, while curl from the very same host and IP gets a clean `200`.
 
 The response contains every seat as `{"id": "F14", "status": "A" | "R", ...}`,
 where `A` means available. The script groups seats by row, finds runs of
