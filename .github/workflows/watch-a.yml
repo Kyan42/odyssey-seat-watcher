@@ -16,7 +16,7 @@ on:
       loop_minutes:
         description: "How long this run should keep polling for."
         required: false
-        default: "55"
+        default: "330"
   workflow_run:
     workflows: [watch-b]
     types: [completed]
@@ -32,5 +32,5 @@ jobs:
     uses: ./.github/workflows/seat-watch.yml
     with:
       force_zone: ${{ inputs.force_zone || '' }}
-      loop_minutes: ${{ inputs.loop_minutes || '55' }}
+      loop_minutes: ${{ inputs.loop_minutes || '330' }}
     secrets: inherit

@@ -3,6 +3,9 @@ name: seat-watch
 # Shared implementation. Called by watch-a and watch-b, which re-trigger each
 # other on completion so the watcher keeps itself alive without depending on
 # GitHub's cron (which drops the large majority of scheduled triggers).
+#
+# GitHub caps workflow_run chains at three levels, so each link runs for 5.5
+# hours: one trigger buys roughly 16 hours of cover.
 
 on:
   workflow_call:
@@ -12,7 +15,7 @@ on:
         default: ""
       loop_minutes:
         type: string
-        default: "55"
+        default: "330"
 
 concurrency:
   group: seat-watch
@@ -25,7 +28,7 @@ permissions:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 345
     steps:
       - uses: actions/checkout@v4
 

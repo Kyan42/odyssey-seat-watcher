@@ -20,14 +20,22 @@ workflows that each call the same reusable `seat-watch` workflow, and each is
 triggered by the *other* finishing:
 
 ```
-watch-a ──finishes──▶ watch-b ──finishes──▶ watch-a ──▶ …
+watch-a ──finishes──▶ watch-b ──finishes──▶ watch-a ──▶ (stops)
 ```
 
-A single run polls every 5 minutes for 55 minutes, so the chain hands over
-roughly hourly and coverage is continuous. Both workflows still carry a cron
-schedule, but only as a recovery net in case the chain is ever broken. A
-`concurrency` group guarantees only one run is ever active, and a chained run is
-padded to a 10-minute minimum so a crash can never spin the loop.
+GitHub caps `workflow_run` chains at **three levels**, so the chain cannot run
+forever on its own. Each link therefore polls every 5 minutes for **5.5 hours**,
+meaning a single trigger buys roughly **16 hours** of unbroken cover. The cron
+schedules on both workflows only have to land once or twice a day to keep it
+going, which is well within even the poor observed hit rate.
+
+A `concurrency` group guarantees only one run is ever active, and a chained run
+is padded to a 10-minute minimum so a crash can never spin the loop.
+
+For truly unlimited chaining you would need a personal access token, because
+events created with the built-in `GITHUB_TOKEN` deliberately do not trigger
+further workflows. That is the only reason this design bothers with the
+ping-pong at all.
 
 Once the last show has passed, the watcher disables both workflows itself.
 
