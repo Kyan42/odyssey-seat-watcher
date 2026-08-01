@@ -7,8 +7,29 @@ Auditorium 12 — the **6:30pm** showings on **Sep 8, 9 and 10 2026**.
 When `4` consecutive seats appear in the prime centre block
 (**rows F–J, seats 12–28**) it fires a phone push via [ntfy.sh](https://ntfy.sh).
 
-Runs entirely on GitHub Actions every 15 minutes, so no machine of your own
-needs to be switched on.
+Runs entirely on GitHub Actions, so no machine of your own needs to be switched
+on.
+
+## Scheduling
+
+GitHub's `schedule` trigger turned out to be unusable on its own — in one
+observation it fired **1 of 14** expected times, leaving multi-hour gaps.
+
+So the watcher keeps itself alive instead. `watch-a` and `watch-b` are two
+workflows that each call the same reusable `seat-watch` workflow, and each is
+triggered by the *other* finishing:
+
+```
+watch-a ──finishes──▶ watch-b ──finishes──▶ watch-a ──▶ …
+```
+
+A single run polls every 5 minutes for 55 minutes, so the chain hands over
+roughly hourly and coverage is continuous. Both workflows still carry a cron
+schedule, but only as a recovery net in case the chain is ever broken. A
+`concurrency` group guarantees only one run is ever active, and a chained run is
+padded to a 10-minute minimum so a crash can never spin the loop.
+
+Once the last show has passed, the watcher disables both workflows itself.
 
 ## How it works
 
@@ -31,8 +52,10 @@ where `A` means available. The script groups seats by row, finds runs of
 consecutively-numbered available seats inside the target zone, and pushes an
 alert when a run is long enough.
 
-`state.json` is committed back to the repo after each run so the same block
+`state.json` is kept in the Actions cache (not committed) so the same block
 isn't reported over and over. A still-open block is re-announced once an hour.
+Committing state was the original approach, but pushing to the default branch
+makes GitHub re-register the cron schedule.
 
 ## Setup
 
@@ -58,7 +81,6 @@ Edit the config block at the top of `watch.py`:
 
 ## Caveats
 
-- GitHub's cron is best-effort and can slip by several minutes under load.
 - `showtimeHashCode` values are baked into `SHOWS`. If Fandango ever rotates
   them the script will start getting 403/404s and will send a throttled
   "watcher problem" push instead of failing silently.

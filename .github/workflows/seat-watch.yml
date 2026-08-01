@@ -29,6 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Note start time
+        id: t0
+        run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
       # State lives in the Actions cache, not a commit: pushing to the default
       # branch makes GitHub re-register the cron schedule.
       - name: Restore alert state
@@ -63,3 +67,15 @@ jobs:
             gh api -X PUT "repos/${{ github.repository }}/actions/workflows/$wf/disable"
             echo "Disabled $wf"
           done
+
+      # Each run re-triggers its partner, so a run that dies immediately would
+      # spin the chain. Never let a chained run finish in under 10 minutes.
+      - name: Guard against a hot restart loop
+        if: always() && github.event_name == 'workflow_run'
+        run: |
+          floor=600
+          elapsed=$(( $(date +%s) - ${{ steps.t0.outputs.epoch }} ))
+          if [ "$elapsed" -lt "$floor" ]; then
+            echo "Only ran for ${elapsed}s, padding to ${floor}s before restarting the chain."
+            sleep $(( floor - elapsed ))
+          fi
