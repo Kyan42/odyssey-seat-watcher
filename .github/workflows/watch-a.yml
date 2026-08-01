@@ -1,0 +1,30 @@
+name: watch-a
+
+# Half of the self-sustaining pair: finishing here starts watch-b, and watch-b
+# finishing starts this again. The schedule is only a recovery net in case the
+# chain is ever broken.
+
+on:
+  schedule:
+    - cron: "3,23,43 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_zone:
+        description: 'Widen the target zone to force an alert, e.g. "A:1-39". Leave blank for a normal run.'
+        required: false
+        default: ""
+      loop_minutes:
+        description: "How long this run should keep polling for."
+        required: false
+        default: "55"
+  workflow_run:
+    workflows: [watch-b]
+    types: [completed]
+
+jobs:
+  watch:
+    uses: ./.github/workflows/seat-watch.yml
+    with:
+      force_zone: ${{ inputs.force_zone || '' }}
+      loop_minutes: ${{ inputs.loop_minutes || '55' }}
+    secrets: inherit

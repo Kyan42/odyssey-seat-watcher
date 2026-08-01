@@ -1,0 +1,18 @@
+name: watch-b
+
+# The other half of the pair. See watch-a.
+
+on:
+  schedule:
+    - cron: "13,33,53 * * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: [watch-a]
+    types: [completed]
+
+jobs:
+  watch:
+    uses: ./.github/workflows/seat-watch.yml
+    with:
+      loop_minutes: "55"
+    secrets: inherit

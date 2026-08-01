@@ -1,29 +1,26 @@
-name: Watch Odyssey 70mm seats
+name: seat-watch
+
+# Shared implementation. Called by watch-a and watch-b, which re-trigger each
+# other on completion so the watcher keeps itself alive without depending on
+# GitHub's cron (which drops the large majority of scheduled triggers).
 
 on:
-  schedule:
-    # GitHub drops a lot of scheduled triggers, so ask often and let the job
-    # itself keep polling for the next hour. Only one can run at a time.
-    - cron: "3,23,43 * * * *"
-  workflow_dispatch:
+  workflow_call:
     inputs:
       force_zone:
-        description: 'Widen the target zone to force an alert, e.g. "A:1-39". Leave blank for a normal run.'
-        required: false
+        type: string
         default: ""
       loop_minutes:
-        description: "How long this run should keep polling for."
-        required: false
+        type: string
         default: "55"
 
-# A queued run starts the moment the active one finishes, so coverage stays
-# continuous even when GitHub skips most of the cron triggers.
 concurrency:
   group: seat-watch
   cancel-in-progress: false
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   watch:
@@ -32,9 +29,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # State lives in the Actions cache rather than in a commit: pushing to the
-      # default branch makes GitHub re-register the cron schedule, which appears
-      # to starve it of runs.
+      # State lives in the Actions cache, not a commit: pushing to the default
+      # branch makes GitHub re-register the cron schedule.
       - name: Restore alert state
         uses: actions/cache/restore@v4
         with:
@@ -43,10 +39,11 @@ jobs:
           restore-keys: seat-state-
 
       - name: Watch seat maps
+        id: watch
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           FORCE_ZONE: ${{ inputs.force_zone }}
-          LOOP_MINUTES: ${{ inputs.loop_minutes || '55' }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes }}
           POLL_SECONDS: "300"
         run: python3 watch.py
 
@@ -56,3 +53,13 @@ jobs:
         with:
           path: state.json
           key: seat-state-${{ github.run_id }}
+
+      - name: Shut the watcher down once the shows have passed
+        if: steps.watch.outputs.expired == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in watch-a.yml watch-b.yml; do
+            gh api -X PUT "repos/${{ github.repository }}/actions/workflows/$wf/disable"
+            echo "Disabled $wf"
+          done

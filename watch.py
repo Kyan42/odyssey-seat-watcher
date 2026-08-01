@@ -19,7 +19,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 # ---------------- config ----------------
@@ -240,7 +240,24 @@ def save_state(state):
         fh.write("\n")
 
 
+def emit_output(name, value):
+    """Expose a value to later workflow steps."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(f"{name}={value}\n")
+
+
 def main():
+    # Once every show has been and gone, tell the workflow to switch itself off
+    # so the self-triggering chain cannot run forever.
+    last_show = date.fromisoformat(max(s["date"] for s in SHOWS))
+    if now().astimezone(PACIFIC).date() > last_show:
+        log(f"Last show was {last_show} - nothing left to watch, shutting down.")
+        emit_output("expired", "true")
+        return 0
+
     # GitHub's cron drops a large share of scheduled triggers, so one job stays
     # alive and polls on its own clock. A dropped trigger then costs nothing.
     loop_minutes = int(os.environ.get("LOOP_MINUTES", "0"))
