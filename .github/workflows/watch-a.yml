@@ -21,6 +21,12 @@ on:
     workflows: [watch-b]
     types: [completed]
 
+# A called workflow cannot request more than its caller holds, and this repo
+# defaults the token to read-only.
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   watch:
     uses: ./.github/workflows/seat-watch.yml
