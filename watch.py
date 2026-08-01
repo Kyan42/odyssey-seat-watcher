@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -183,10 +184,9 @@ def load_state():
         return {}
 
 
-def main():
-    state = load_state()
+def run_once(state):
+    """One sweep over every show. Returns the number of failures."""
     failures = 0
-
     for show in SHOWS:
         key = show["date"]
         prev = state.get(key) or {}
@@ -231,14 +231,38 @@ def main():
                 prev = dict(prev)
                 prev["lastFail"] = now().isoformat()
             state[key] = prev
+    return failures
 
+
+def save_state(state):
     with open(STATE_FILE, "w", encoding="utf-8") as fh:
         json.dump(state, fh, indent=2, sort_keys=True)
         fh.write("\n")
 
-    # Every show failing means something systemic broke - fail the job so
-    # GitHub emails as a second line of defence.
-    if failures == len(SHOWS):
+
+def main():
+    # GitHub's cron drops a large share of scheduled triggers, so one job stays
+    # alive and polls on its own clock. A dropped trigger then costs nothing.
+    loop_minutes = int(os.environ.get("LOOP_MINUTES", "0"))
+    poll_seconds = max(60, int(os.environ.get("POLL_SECONDS", "300")))
+    deadline = now() + timedelta(minutes=loop_minutes)
+
+    state = load_state()
+    failures = run_once(state)
+    save_state(state)
+    passes = 1
+
+    while now() + timedelta(seconds=poll_seconds) < deadline:
+        time.sleep(poll_seconds)
+        failures = run_once(state)
+        save_state(state)
+        passes += 1
+
+    log(f"Finished after {passes} pass(es).")
+
+    # Every show failing on a one-shot run means something systemic broke, so
+    # fail the job and let GitHub's notification act as a second alert channel.
+    if failures == len(SHOWS) and loop_minutes == 0:
         log("All shows failed - failing the job to raise a GitHub notification.")
         return 1
     return 0

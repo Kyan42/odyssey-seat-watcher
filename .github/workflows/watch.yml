@@ -2,44 +2,57 @@ name: Watch Odyssey 70mm seats
 
 on:
   schedule:
-    # Every 15 minutes, offset off the hour to dodge GitHub's top-of-hour queue.
-    - cron: "7,22,37,52 * * * *"
+    # GitHub drops a lot of scheduled triggers, so ask often and let the job
+    # itself keep polling for the next hour. Only one can run at a time.
+    - cron: "3,23,43 * * * *"
   workflow_dispatch:
     inputs:
       force_zone:
         description: 'Widen the target zone to force an alert, e.g. "A:1-39". Leave blank for a normal run.'
         required: false
         default: ""
+      loop_minutes:
+        description: "How long this run should keep polling for."
+        required: false
+        default: "55"
 
+# A queued run starts the moment the active one finishes, so coverage stays
+# continuous even when GitHub skips most of the cron triggers.
 concurrency:
   group: seat-watch
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check seat maps
+      # State lives in the Actions cache rather than in a commit: pushing to the
+      # default branch makes GitHub re-register the cron schedule, which appears
+      # to starve it of runs.
+      - name: Restore alert state
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: seat-state-${{ github.run_id }}
+          restore-keys: seat-state-
+
+      - name: Watch seat maps
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           FORCE_ZONE: ${{ inputs.force_zone }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '55' }}
+          POLL_SECONDS: "300"
         run: python3 watch.py
 
-      - name: Persist alert state
+      - name: Save alert state
         if: always() && !inputs.force_zone
-        run: |
-          if [[ -n "$(git status --porcelain state.json)" ]]; then
-            git config user.name  "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add state.json
-            git commit -m "state: seat availability changed [skip ci]"
-            git push
-          else
-            echo "No state change."
-          fi
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: seat-state-${{ github.run_id }}
