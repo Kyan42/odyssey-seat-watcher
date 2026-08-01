@@ -4,7 +4,7 @@ name: watch-b
 
 on:
   schedule:
-    - cron: "13,33,53 * * * *"
+    - cron: "47 1-23/2 * * *"
   workflow_dispatch:
   workflow_run:
     workflows: [watch-a]
@@ -16,6 +16,8 @@ permissions:
 
 jobs:
   watch:
+    # See watch-a.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'cancelled'
     uses: ./.github/workflows/seat-watch.yml
     with:
       loop_minutes: "330"

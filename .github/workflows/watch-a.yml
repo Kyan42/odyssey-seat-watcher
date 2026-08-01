@@ -6,7 +6,9 @@ name: watch-a
 
 on:
   schedule:
-    - cron: "3,23,43 * * * *"
+    # Sparse: a chain is worth ~16 hours, and frequent triggers just pile up in
+    # the concurrency queue and cancel each other.
+    - cron: "17 */2 * * *"
   workflow_dispatch:
     inputs:
       force_zone:
@@ -29,6 +31,9 @@ permissions:
 
 jobs:
   watch:
+    # A cancelled run must not hand off, or every superseded queue entry spawns
+    # a fresh run that is itself immediately superseded.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'cancelled'
     uses: ./.github/workflows/seat-watch.yml
     with:
       force_zone: ${{ inputs.force_zone || '' }}
