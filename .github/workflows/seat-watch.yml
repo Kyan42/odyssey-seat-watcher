@@ -42,12 +42,16 @@ jobs:
       # Queuing happens up front, not at the end, so the successor is already
       # waiting in the concurrency group even if this run crashes or times out.
       - name: Queue the next run
-        if: ${{ !inputs.force_zone }}
         env:
           GH_TOKEN: ${{ secrets.WATCHER_PAT }}
+          IS_TEST: ${{ inputs.force_zone && 'yes' || '' }}
         run: |
           if [ -z "${GH_TOKEN}" ]; then
             echo "No WATCHER_PAT secret set - relying on the workflow_run chain and cron."
+            exit 0
+          fi
+          if [ -n "${IS_TEST}" ]; then
+            echo "Forced test run - not queuing a successor."
             exit 0
           fi
           if gh workflow run watch-a.yml --repo "${{ github.repository }}"; then
