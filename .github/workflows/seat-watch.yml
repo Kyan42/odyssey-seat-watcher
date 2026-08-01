@@ -36,6 +36,26 @@ jobs:
         id: t0
         run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
 
+      # Optional hardening. GitHub blocks GITHUB_TOKEN from triggering
+      # workflows, so without a PAT we fall back on the (capped) workflow_run
+      # chain plus cron. With one, every run explicitly queues its successor.
+      # Queuing happens up front, not at the end, so the successor is already
+      # waiting in the concurrency group even if this run crashes or times out.
+      - name: Queue the next run
+        if: ${{ !inputs.force_zone }}
+        env:
+          GH_TOKEN: ${{ secrets.WATCHER_PAT }}
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "No WATCHER_PAT secret set - relying on the workflow_run chain and cron."
+            exit 0
+          fi
+          if gh workflow run watch-a.yml --repo "${{ github.repository }}"; then
+            echo "Successor queued; it will start as soon as this run ends."
+          else
+            echo "Could not queue a successor (workflow disabled?) - not fatal."
+          fi
+
       # State lives in the Actions cache, not a commit: pushing to the default
       # branch makes GitHub re-register the cron schedule.
       - name: Restore alert state

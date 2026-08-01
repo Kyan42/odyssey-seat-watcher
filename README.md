@@ -32,10 +32,17 @@ going, which is well within even the poor observed hit rate.
 A `concurrency` group guarantees only one run is ever active, and a chained run
 is padded to a 10-minute minimum so a crash can never spin the loop.
 
-For truly unlimited chaining you would need a personal access token, because
-events created with the built-in `GITHUB_TOKEN` deliberately do not trigger
-further workflows. That is the only reason this design bothers with the
-ping-pong at all.
+For truly unlimited chaining, add an optional `WATCHER_PAT` secret (a
+fine-grained personal access token scoped to this repo with **Actions: read and
+write**). Each run then queues its own successor up front, which removes the
+dependence on both the three-level cap and the cron schedule. Events created
+with the built-in `GITHUB_TOKEN` deliberately do not trigger workflows, which is
+the only reason this design needs the ping-pong at all. Without the secret the
+workflow still runs — it just falls back to the chain plus cron.
+
+```bash
+gh secret set WATCHER_PAT --repo Kyan42/odyssey-seat-watcher
+```
 
 Once the last show has passed, the watcher disables both workflows itself.
 
